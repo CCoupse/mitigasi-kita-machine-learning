@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1E40AF">
+    <title>MitigasiKita - Earthquake and Tsunami Risk Prediction</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="/output.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/react@17.0.2/umd/react.development.js" onerror="console.error('Failed to load React')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@17.0.2/umd/react-dom.development.js" onerror="console.error('Failed to load ReactDOM')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.4.0/dist/axios.min.js" onerror="console.error('Failed to load Axios')"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="console.error('Failed to load Leaflet')"></script>
+    <style>
+        .icon-map-marker-alt::before { content: "📍"; }
+        .icon-search::before { content: "🔍"; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script src="/script.js" onerror="console.error('Failed to load script.js')"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js', { type: 'classic' })
+                    .then(registration => console.log('Service Worker registered:', registration.scope))
+                    .catch(error => console.error('Service Worker registration failed:', error));
+            });
+        }
+    </script>
+</body>
+</html>
