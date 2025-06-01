@@ -9,7 +9,7 @@ pandas==2.2.3             # Manipulasi dan analisis data
 numpy==1.26.4             # Operasi numerik dan array
 scikit-learn==1.5.2       # Preprocessing dan metrik evaluasi
 joblib==1.4.2             # Memuat/simpan model dan preprocessor
-imblearn==0.12.3          # SMOTE untuk oversampling data tidak seimbang
+imbalanced-learn==0.12.3  # SMOTE untuk oversampling data tidak seimbang
 
 # Data eksternal
 requests==2.32.3          # Mengambil data cuaca dari Open-Meteo API
