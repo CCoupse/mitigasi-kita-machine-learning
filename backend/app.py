@@ -33,23 +33,24 @@ model = tf.keras.models.load_model(MODEL_PATH)
 preprocessor = joblib.load(PREPROCESSOR_PATH)
 label_encoder = joblib.load(LABEL_ENCODER_PATH)
 
-API_KEY = '78d579463368f92711d8f7f9be8a85d0'
+# Tidak perlu API key untuk Open-Meteo
 geocoder = Nominatim(user_agent="mitigasi_kita")
 
 # Fungsi utilitas dari notebook
 def get_weather_data(latitude, longitude):
-    """Mengambil data cuaca dari OpenWeatherMap API."""
-    url = f'https://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={API_KEY}&units=metric'
+    """Mengambil data cuaca dari Open-Meteo API."""
+    url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max&timezone=auto'
     try:
         response = requests.get(url, timeout=5)
         response.raise_for_status()
         data = response.json()
+        daily = data['daily']
         return {
-            'temperature_2m_max': data['main']['temp_max'],
-            'temperature_2m_min': data['main']['temp_min'],
-            'precipitation_sum': data.get('rain', {}).get('1h', 17.9),
-            'windspeed_10m_max': data['wind']['speed'] * 3.6,  # Perbaikan typo
-            'weathercode': data['weather'][0]['id']
+            'temperature_2m_max': daily['temperature_2m_max'][0],  
+            'temperature_2m_min': daily['temperature_2m_min'][0],  
+            'precipitation_sum': daily['precipitation_sum'][0],    
+            'windspeed_10m_max': daily['windspeed_10m_max'][0],    
+            'weathercode': 800 
         }
     except (requests.RequestException, KeyError) as e:
         logger.error(f"Gagal mengambil data cuaca: {e}. Menggunakan nilai default.")
@@ -136,7 +137,10 @@ def predict():
         X = preprocessor.transform(input_data)
         logger.info(f"Bentuk data setelah preprocessing: {X.shape}")
         prediction = model.predict(X)
-        predicted_class = label_encoder.inverse_transform([np.argmax(prediction, axis=1)[0]])[0]
+        predicted_class_idx = np.argmax(prediction, axis=1)[0]
+        predicted_class = label_encoder.inverse_transform([predicted_class_idx])[0]
+        
+        confidence_score = float(prediction[0][predicted_class_idx])
         
         magnitude = input_data['magnitude'].iloc[0]
         depth = input_data['depth'].iloc[0]
@@ -158,7 +162,8 @@ def predict():
             'temperature_2m_max': float(input_data['temperature_2m_max'].iloc[0]),
             'windspeed_10m_max': float(input_data['windspeed_10m_max'].iloc[0]),
             'precipitation_sum': float(input_data['precipitation_sum'].iloc[0]),
-            'status': predicted_class
+            'status': predicted_class,
+            'confidence_score': confidence_score
         }
         
         logger.info(f"Prediksi: {predicted_class}, Output: {output}")
