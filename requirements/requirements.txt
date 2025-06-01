@@ -1,18 +1,20 @@
-Flask
-tensorflow==2.19.0
-scikit-learn
-matplotlib
-seaborn
-imblearn
-pandas
-numpy
-joblib
-requests
-gunicorn
-flask_cors
-flask==2.0.1 
-pandas==1.5.0 
-numpy==1.23.0 
-requests==2.28.1 
-tensorflow==2.15.0 
-joblib==1.2.0
+# Backend dependencies
+Flask==3.0.3              # Framework untuk backend API
+flask-cors==5.0.0         # Mendukung CORS untuk komunikasi frontend-backend
+gunicorn==23.0.0          # Server WSGI untuk deployment backend
+
+# Machine Learning dan preprocessing
+tensorflow==2.17.0        # Framework untuk model DNN
+pandas==2.2.3             # Manipulasi dan analisis data
+numpy==1.26.4             # Operasi numerik dan array
+scikit-learn==1.5.2       # Preprocessing dan metrik evaluasi
+joblib==1.4.2             # Memuat/simpan model dan preprocessor
+imblearn==0.12.3          # SMOTE untuk oversampling data tidak seimbang
+
+# Data eksternal
+requests==2.32.3          # Mengambil data cuaca dari Open-Meteo API
+geopy==2.4.1              # Reverse geocoding untuk lokasi
+
+# Visualisasi (untuk notebook)
+matplotlib==3.9.2         # Plotting untuk visualisasi data
+seaborn==0.13.2           # Visualisasi statistik
