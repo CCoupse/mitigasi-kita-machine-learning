@@ -12,23 +12,19 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Konfigurasi logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Path model dan preprocessor
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
 MODEL_PATH = os.path.join(MODEL_DIR, 'model_dnn.h5')
 PREPROCESSOR_PATH = os.path.join(MODEL_DIR, 'preprocessor.pkl')
 LABEL_ENCODER_PATH = os.path.join(MODEL_DIR, 'label_encoder.pkl')
 
-# Verifikasi file ada
 for path in [MODEL_PATH, PREPROCESSOR_PATH, LABEL_ENCODER_PATH]:
     if not os.path.exists(path):
         logger.error(f"File tidak ditemukan: {path}")
         raise FileNotFoundError(f"File tidak ditemukan: {path}")
 
-# Muat model dan preprocessor
 try:
     model = tf.keras.models.load_model(MODEL_PATH)
     preprocessor = joblib.load(PREPROCESSOR_PATH)
@@ -37,10 +33,8 @@ except Exception as e:
     logger.error(f"Gagal memuat model atau preprocessor: {e}")
     raise e
 
-# Tidak perlu API key untuk Open-Meteo
 geocoder = Nominatim(user_agent="mitigasi_kita", timeout=5)
 
-# Fungsi utilitas dari notebook
 def get_weather_data(latitude, longitude):
     """Mengambil data cuaca dari Open-Meteo API."""
     url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max&timezone=auto'
@@ -122,29 +116,24 @@ def prepare_input_data(latitude, longitude):
         **other_features
     }
     
-    # Pastikan kolom sesuai dengan yang diharapkan oleh preprocessor
     feature_columns = preprocessor.feature_names_in_
     logger.info(f"Kolom yang diharapkan oleh preprocessor: {feature_columns}")
     
     input_df = pd.DataFrame([input_data])
     
-    # Sanitasi data: pastikan tipe data benar
     numeric_cols = ['latitude', 'longitude', 'temperature_2m_max', 'temperature_2m_min',
                     'precipitation_sum', 'windspeed_10m_max', 'weathercode', 'magnitude',
                     'depth', 'phasecount', 'azimuth_gap']
     categorical_cols = ['mag_type', 'location', 'agency', 'city', 'potensi_gempa', 'potensi_tsunami']
     
-    # Sanitasi kolom numerik
     for col in numeric_cols:
         if col in input_df.columns:
             input_df[col] = pd.to_numeric(input_df[col], errors='coerce').fillna(0).astype(float)
     
-    # Sanitasi kolom kategorikal
     for col in categorical_cols:
         if col in input_df.columns:
             input_df[col] = input_df[col].fillna('Tidak Diketahui').astype(str)
     
-    # Tambahkan kolom yang hilang dengan nilai default
     for col in feature_columns:
         if col not in input_df.columns:
             if col in numeric_cols:
@@ -152,7 +141,6 @@ def prepare_input_data(latitude, longitude):
             else:
                 input_df[col] = 'Tidak Diketahui'
     
-    # Hapus kolom yang tidak diharapkan
     input_df = input_df[feature_columns]
     
     logger.info(f"Input data setelah sanitasi (tipe): {input_df.dtypes}")
