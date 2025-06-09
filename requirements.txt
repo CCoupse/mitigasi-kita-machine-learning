@@ -1,12 +1,22 @@
-tensorflow==2.15.0
-keras==2.15.0
-pandas==2.2.2
-scikit-learn==1.5.0
-numpy==1.26.4
-jupyter==1.0.0
-matplotlib==3.8.4
-seaborn==0.13.2
-plotly==5.22.0
-imbalanced-learn==0.12.3
-geopy==2.4.1
-requests==2.32.3
+# Backend dependencies
+Flask==3.0.3              # Framework untuk backend API
+flask-cors==5.0.0         # Mendukung CORS untuk komunikasi frontend-backend
+gunicorn==23.0.0          # Server WSGI untuk deployment backend
+
+# Machine Learning dan preprocessing
+tensorflow==2.17.0        # Framework untuk model DNN dan CNN
+pandas==2.2.3             # Manipulasi dan analisis data
+numpy==1.26.4             # Operasi numerik dan array
+scikit-learn==1.5.2       # Preprocessing dan metrik evaluasi
+joblib==1.4.2             # Memuat/simpan model dan preprocessor
+imbalanced-learn==0.12.3  # SMOTE untuk oversampling data tidak seimbang
+
+# Data eksternal
+requests==2.32.3          # Mengambil data cuaca dari Open-Meteo API
+geopy==2.4.1              # Reverse geocoding untuk lokasi
+
+# Visualisasi (untuk notebook)
+matplotlib==3.9.2         # Plotting untuk visualisasi data
+seaborn==0.13.2           # Visualisasi statistik
+plotly==5.22.0            # Visualisasi interaktif
+jupyter==1.0.0            # Menjalankan Notebook.ipynb untuk EDA dan evaluasi
