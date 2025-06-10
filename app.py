@@ -1,57 +1,64 @@
-from flask import Flask, request, jsonify
-import numpy as np
-import pandas as pd
-import tensorflow as tf
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import joblib
+import numpy as np
 import os
-import logging
 import requests
+import tensorflow as tf
+import pandas as pd
 from geopy.geocoders import Nominatim
-from flask_cors import CORS
+from typing import Optional
 
-app = Flask(__name__)
-CORS(app)
+# === INIT APP ===
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# === PATHS ===
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
-MODEL_PATH = os.path.join(MODEL_DIR, 'model_dnn.h5')
+TFLITE_PATH = os.path.join(MODEL_DIR, 'model_dnn.tflite')
 PREPROCESSOR_PATH = os.path.join(MODEL_DIR, 'preprocessor.pkl')
 LABEL_ENCODER_PATH = os.path.join(MODEL_DIR, 'label_encoder.pkl')
 
-for path in [MODEL_PATH, PREPROCESSOR_PATH, LABEL_ENCODER_PATH]:
-    if not os.path.exists(path):
-        logger.error(f"File tidak ditemukan: {path}")
-        raise FileNotFoundError(f"File tidak ditemukan: {path}")
+# === LOAD MODEL ===
+interpreter = tf.lite.Interpreter(model_path=TFLITE_PATH)
+interpreter.allocate_tensors()
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
-try:
-    model = tf.keras.models.load_model(MODEL_PATH)
-    preprocessor = joblib.load(PREPROCESSOR_PATH)
-    label_encoder = joblib.load(LABEL_ENCODER_PATH)
-except Exception as e:
-    logger.error(f"Gagal memuat model atau preprocessor: {e}")
-    raise e
+# === LOAD PREPROCESSOR ===
+preprocessor = joblib.load(PREPROCESSOR_PATH)
+label_encoder = joblib.load(LABEL_ENCODER_PATH)
 
-geocoder = Nominatim(user_agent="mitigasi_kita", timeout=5)
+# === GEO CODER ===
+geocoder = Nominatim(user_agent="mitigasi_kita")
 
+# === MODELS ===
+class Coordinate(BaseModel):
+    latitude: float
+    longitude: float
+
+# === UTILITY FUNCTIONS ===
 def get_weather_data(latitude, longitude):
-    """Mengambil data cuaca dari Open-Meteo API."""
-    url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max&timezone=auto'
     try:
+        url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max&timezone=auto'
         response = requests.get(url, timeout=5)
         response.raise_for_status()
-        data = response.json()
-        daily = data['daily']
+        daily = response.json()['daily']
         return {
             'temperature_2m_max': daily['temperature_2m_max'][0],
             'temperature_2m_min': daily['temperature_2m_min'][0],
             'precipitation_sum': daily['precipitation_sum'][0],
             'windspeed_10m_max': daily['windspeed_10m_max'][0],
-            'weathercode': 800  # Default
+            'weathercode': 800  
         }
-    except (requests.RequestException, KeyError, IndexError) as e:
-        logger.error(f"Gagal mengambil data cuaca: {e}. Menggunakan nilai default.")
+    except:
         return {
             'temperature_2m_max': 29.5,
             'temperature_2m_min': 25.3,
@@ -61,147 +68,137 @@ def get_weather_data(latitude, longitude):
         }
 
 def get_location_data(latitude, longitude):
-    """Mengambil nama lokasi dan kota."""
     try:
         location = geocoder.reverse((latitude, longitude), language="id")
-        if location:
-            address = location.raw.get("address", {})
-            city = address.get("city", address.get("town", address.get("village", "Ambon")))
-            location_name = address.get("state", "Banda Sea")
-            return location_name, city
-        return "Banda Sea", "Ambon"
-    except Exception as e:
-        logger.error(f"Gagal mengambil data lokasi: {e}")
-        return "Banda Sea", "Ambon"
+        address = location.raw.get("address", {}) if location else {}
+        city = address.get("city") or address.get("town") or address.get("village") or "Jakarta"
+        location_name = address.get("state", "Jawa")
+        return location_name, city
+    except:
+        return "Jawa", "Jakarta"
 
 def determine_tsunami_potential(magnitude, depth):
-    """Menentukan potensi tsunami."""
-    if magnitude > 7 and depth < 30:
-        return "Tinggi"
-    elif magnitude > 6:
-        return "Sedang"
-    else:
-        return "Rendah"
+    if magnitude >= 1.6 and depth < 70:  # Dangkal dan magnitudo tertinggi
+        return "Tinggi", "Bahaya"
+    elif magnitude >= 1.1 and depth < 300:  # Magnitudo sedang, kedalaman menengah
+        return "Sedang", "Waspada"
+    else:  # Magnitudo rendah atau kedalaman lebih dalam
+        return "Rendah", "Aman"
 
-def prepare_input_data(latitude, longitude):
-    """Menyiapkan fitur untuk inferensi."""
-    if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
-        logger.error("Nilai latitude atau longitude tidak valid")
-        raise ValueError("Nilai latitude atau longitude tidak valid")
-    
-    weather_data = get_weather_data(latitude, longitude)
+def prepare_input_data(latitude, longitude, predicted_class="Aman"):
+    weather = get_weather_data(latitude, longitude)
     location, city = get_location_data(latitude, longitude)
-    
-    earthquake_features = {
-        'magnitude': 4.427889833,
+
+    # Generate magnitude based on predicted_class
+    if predicted_class == "Aman":
+        magnitude = np.random.uniform(0.0, 1.0)
+    elif predicted_class == "Waspada":
+        magnitude = np.random.uniform(1.1, 1.5)
+    else:  # Bahaya
+        magnitude = np.random.uniform(1.6, 2.5)
+
+    # Generate depth based on predicted_class
+    if predicted_class == "Aman":
+        depth = np.random.uniform(301.0, 700.0)  # Menengah, risiko rendah
+    elif predicted_class == "Waspada":
+        depth = np.random.uniform(71.0, 300.0)  # Dangkal-menengah, risiko sedang
+    else:  # Bahaya
+        depth = np.random.uniform(0.0, 70.0)  # Dangkal, risiko lebih tinggi
+
+    quake = {
+        'magnitude': magnitude,
         'mag_type': 'M',
-        'depth': 28.0,
+        'depth': depth,
         'phasecount': 65,
         'azimuth_gap': 136.0,
         'potensi_tsunami': 'Rendah'
     }
-    
-    other_features = {
+
+    other = {
         'location': location,
         'agency': 'BMKG',
         'city': city,
-        'potensi_gempa': 'Tidak Diketahui'  # Ditambahkan untuk preprocessor
+        'potensi_gempa': 'Rendah'
     }
-    
-    input_data = {
-        'latitude': float(latitude),
-        'longitude': float(longitude),
-        **weather_data,
-        **earthquake_features,
-        **other_features
-    }
-    
-    feature_columns = preprocessor.feature_names_in_
-    logger.info(f"Kolom yang diharapkan oleh preprocessor: {feature_columns}")
-    
-    input_df = pd.DataFrame([input_data])
-    
-    numeric_cols = ['latitude', 'longitude', 'temperature_2m_max', 'temperature_2m_min',
-                    'precipitation_sum', 'windspeed_10m_max', 'weathercode', 'magnitude',
-                    'depth', 'phasecount', 'azimuth_gap']
-    categorical_cols = ['mag_type', 'location', 'agency', 'city', 'potensi_gempa', 'potensi_tsunami']
-    
-    for col in numeric_cols:
-        if col in input_df.columns:
-            input_df[col] = pd.to_numeric(input_df[col], errors='coerce').fillna(0).astype(float)
-    
-    for col in categorical_cols:
-        if col in input_df.columns:
-            input_df[col] = input_df[col].fillna('Tidak Diketahui').astype(str)
-    
-    for col in feature_columns:
-        if col not in input_df.columns:
-            if col in numeric_cols:
-                input_df[col] = 0.0
-            else:
-                input_df[col] = 'Tidak Diketahui'
-    
-    input_df = input_df[feature_columns]
-    
-    logger.info(f"Input data setelah sanitasi (tipe): {input_df.dtypes}")
-    logger.info(f"Input data setelah sanitasi (nilai): {input_df}")
-    return input_df
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    """Endpoint untuk prediksi risiko bencana."""
+    full_input = {
+        'latitude': latitude,
+        'longitude': longitude,
+        **weather,
+        **quake,
+        **other
+    }
+
+    return full_input  
+
+# === ROUTE ===
+@app.post("/predict")
+async def predict(coord: Coordinate):
     try:
-        data = request.get_json()
-        logger.info(f"Menerima data: {data}")
-        latitude = float(data.get('latitude'))
-        longitude = float(data.get('longitude'))
-        if latitude is None or longitude is None:
-            logger.error("Latitude atau longitude tidak ada")
-            return jsonify({'error': 'Latitude dan longitude diperlukan'}), 400
-        
-        input_data = prepare_input_data(latitude, longitude)
-        X = preprocessor.transform(input_data)
-        logger.info(f"Bentuk data setelah preprocessing: {X.shape}")
-        prediction = model.predict(X, verbose=0)
-        predicted_class_idx = np.argmax(prediction, axis=1)[0]
-        predicted_class = label_encoder.inverse_transform([predicted_class_idx])[0]
-        
-        # Hitung potensi tsunami
-        potensi_tsunami = determine_tsunami_potential(4.427889833, 28.0)
-        
-        output = {
-            'status': predicted_class,
-            'potensi_tsunami': potensi_tsunami,
-            'location': input_data['location'].iloc[0],
-            'city': input_data['city'].iloc[0],
-            'temperature_2m_min': float(input_data['temperature_2m_min'].iloc[0]),
-            'temperature_2m_max': float(input_data['temperature_2m_max'].iloc[0]),
-            'windspeed_10m_max': float(input_data['windspeed_10m_max'].iloc[0]),
-            'precipitation_sum': float(input_data['precipitation_sum'].iloc[0])
+        latitude = coord.latitude
+        longitude = coord.longitude
+
+        input_dict = prepare_input_data(latitude, longitude, "Aman")
+        df_input = pd.DataFrame([input_dict])
+        df_input = df_input[preprocessor.feature_names_in_]
+        X = preprocessor.transform(df_input).astype(np.float32)
+
+        interpreter.set_tensor(input_details[0]['index'], X)
+        interpreter.invoke()
+        prediction = interpreter.get_tensor(output_details[0]['index'])
+
+        class_idx = np.argmax(prediction, axis=1)[0]
+        predicted_class = label_encoder.inverse_transform([class_idx])[0]
+
+        input_dict = prepare_input_data(latitude, longitude, predicted_class)
+        df_input = pd.DataFrame([input_dict])
+        df_input = df_input[preprocessor.feature_names_in_]
+        X = preprocessor.transform(df_input).astype(np.float32)
+
+        interpreter.set_tensor(input_details[0]['index'], X)
+        interpreter.invoke()
+        prediction = interpreter.get_tensor(output_details[0]['index'])
+
+        class_idx = np.argmax(prediction, axis=1)[0]
+        predicted_class = label_encoder.inverse_transform([class_idx])[0]
+        confidence_score = float(prediction[0][class_idx])
+
+        magnitude = input_dict['magnitude']
+        depth = input_dict['depth']
+        potensi_tsunami, _ = determine_tsunami_potential(magnitude, depth)
+
+        return {
+            'status': 'success',
+            'data': {
+                'location': input_dict['location'],
+                'city': input_dict['city'],
+                'agency': input_dict['agency'],
+                'mag_type': input_dict['mag_type'],
+                'magnitude': round(float(magnitude), 2),
+                'depth': round(float(depth), 2),
+                'azimuth_gap': round(float(input_dict['azimuth_gap']), 2),
+                'phasecount': int(input_dict['phasecount']),
+                'potensi_tsunami': potensi_tsunami,
+                'latitude': latitude,
+                'longitude': longitude,
+                'temperature_2m_min': float(input_dict['temperature_2m_min']),
+                'temperature_2m_max': float(input_dict['temperature_2m_max']),
+                'windspeed_10m_max': float(input_dict['windspeed_10m_max']),
+                'precipitation_sum': float(input_dict['precipitation_sum']),
+                'status': predicted_class,
+                #'confidence_score': confidence_score
+            }
         }
-        
-        logger.info(f"Prediksi: {predicted_class}, Output: {output}")
-        return jsonify({'status': 'success', 'data': output})
-    except ValueError as ve:
-        logger.error(f"Error validasi: {str(ve)}")
-        return jsonify({'error': str(ve)}), 400
-    except Exception as e:
-        logger.error(f"Error saat prediksi: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/login', methods=['POST'])
-def login():
-    """Endpoint untuk login sederhana."""
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
-        if email == 'test@example.com' and password == 'password':
-            return jsonify({'currentUser': email})
-        return jsonify({'error': 'Email atau kata sandi salah'}), 401
     except Exception as e:
-        logger.error(f"Error saat login: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return {"status": "error", "message": str(e)}
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+@app.get("/")
+async def home(request: Request):
+    base_url = str(request.base_url)
+    return {
+        "status": "success",
+        "message": f"Welcome to Earthquake & Tsunami Prediction API, show documentation at {base_url}docs"
+    }
+
+# uvicorn app:app --host 0.0.0.0 --port 5000 --reload
