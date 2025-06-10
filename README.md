@@ -113,6 +113,3 @@ Kami menyambut kontribusi! Silakan fork repositori ini, buat branch baru, dan aj
 - Puput Purwaningsih (FEBE, Universitas Nurdin Hamzah, FC614D5X1635)
 - Aprilia Nurhaliza (FEBE, Universitas Pendidikan Indonesia, FC299D5X2118)
 - Andres Junika Putra (FEBE, Universitas Mercu Buana Yogyakarta, FC613D5Y1033)
-
-## Lisensi
-[MIT License](LICENSE)
